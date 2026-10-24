@@ -1,41 +1,127 @@
-name: Frostline CTF interface probe
+name: Frostline CTF release solver
 on:
   push:
     branches: [ctf/frostline-warmstart-20261024]
 permissions:
   contents: read
 jobs:
-  probe:
+  solve:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Inspect sequencer maintenance port
+      - name: Recover release code
         run: |
           python3 - <<'PY'
-          import socket,time
-          host='0.cloud.chals.io'; port=28332
-          print('DNS',socket.getaddrinfo(host,port),flush=True)
-          def recv(s, maxsec=1.2):
-              s.settimeout(.25); out=bytearray(); end=time.monotonic()+maxsec
-              while time.monotonic()<end:
-                  try:
-                      chunk=s.recv(65536)
-                      if not chunk: print('EOF',flush=True); break
-                      out.extend(chunk)
-                      if len(out)>120000:break
-                      end=time.monotonic()+.45
-                  except socket.timeout: continue
-              if out:
-                  print('RX_BYTES',len(out),'HEAD',repr(bytes(out[:12000])),'TAIL',repr(bytes(out[-500:])),flush=True)
-              return bytes(out)
-          for command in [None,b'help\n',b'status\n',b'?\n']:
-              try:
-                  with socket.create_connection((host,port),timeout=7) as s:
-                      print('CONNECTED',flush=True)
-                      recv(s,2)
-                      if command:
-                          print('SEND',repr(command),flush=True)
-                          s.sendall(command)
-                          recv(s,2)
-              except Exception as e:print('ERROR',type(e).__name__,str(e),flush=True)
+          import socket,base64,struct,zlib,collections,re
+          m=(1<<64)-1;n=0xffffffff
+          def go(b):
+           tmp=bytearray(b);crc=struct.unpack_from('<I',b,28)[0];tmp[28:32]=b'\0'*4
+           assert zlib.crc32(tmp)==crc
+           na,ns,nslot,ctx=struct.unpack_from('<4I',b,12);sec={}
+           for i in range(ns):
+            name,off,size,cnt,sz=struct.unpack_from('<8s4I',b,64+32*i);sec[name.split(b'\0')[0].decode()]=(b[off:off+size],cnt)
+           actors=[]
+           for i in range(na):
+            op,num,fl,r,im,*ds=struct.unpack_from('<4BI4I',sec['.code'][0],i*24)
+            actors.append((op,im,ds[:num]))
+           ets=sec['.ets'][0];slots=[];defer=[]
+           for i in range(nslot):
+            state,head,val=struct.unpack_from('<B3xIQ',ets,16*i);ch=[]
+            while head!=n:
+             c,it,idx,d,head=struct.unpack_from('<QIH2xII',ets,16*nslot+24*head)
+             ch.append((d,(c,it,idx,0)))
+            slots.append((state,val));defer.append(ch)
+           def get(name):
+            data,cnt=sec[name]
+            for j in range(cnt):
+             d,c,it,idx,v=struct.unpack_from('<I4xQIH2xQ',data,32*j)
+             yield(d,(c,it,idx,v))
+           match={(d>>8,d&255,t[:3]):t for d,t in get('.match')};q=collections.deque(get('.bag'))
+           o=bytearray(sec['.out'][0][:32]);mask=struct.unpack_from('<I',sec['.out'][0],32)[0]
+           mono={1,2,3,4,8,10,11,12,14}
+           steps=0
+           while q:
+            d,t=q.popleft();i,port=d>>8,d&255;op,imm,dests=actors[i]
+            if op in mono:l=t;r=None
+            else:
+             k=(i,1-port,t[:3])
+             if k not in match:
+              match[(i,port,t[:3])]=t;continue
+             other=match.pop(k);l,r=(t,other) if port==0 else (other,t)
+            u=l[3];v=r[3] if r else 0;tag=l[:3]
+            def fan(t):
+             for dst in dests:q.append((dst,t))
+            if op==1:w=imm
+            elif op==2:w=u
+            elif op==3:w=(~u)&m
+            elif op==4:w=int.from_bytes(u.to_bytes(8,'little'),'big')
+            elif op==8:fan((l[0],(l[1]+1)&n,l[2],u));continue
+            elif op==10:w=l[0]
+            elif op==11:w=l[1]
+            elif op==12:
+             fresh=ctx;ctx=(ctx+1)&n
+             if dests:
+              q.append((dests[0],(fresh,0,0,u)))
+              for dd in dests[1:]:q.append((dd,tag+(fresh,)))
+             continue
+            elif op==14:
+             s=imm+u;state,val=slots[s]
+             if state==2:fan(tag+(val,))
+             else:defer[s].extend((dd,l) for dd in dests);slots[s]=(1,0)
+             continue
+            elif op==16:w=(u+v)&m
+            elif op==17:w=(u-v)&m
+            elif op==18:w=(u*v)&m
+            elif op==19:w=(u*v)>>64
+            elif op==20:w=u^v
+            elif op==21:w=u&v
+            elif op==22:w=u|v
+            elif op==24:w=(u<<(v&63))&m
+            elif op==25:w=u>>(v&63)
+            elif op==26:s=v&63;w=((u<<s)|(u>>(64-s if s else 64)))&m
+            elif op==27:s=v&63;w=((u>>s)|(u<<(64-s if s else 64)))&m
+            elif op==28:w=int(u==v)
+            elif op==29:w=int(u<v)
+            elif op==32:
+             choice=0 if v else 1
+             if choice<len(dests):q.append((dests[choice],l))
+             continue
+            elif op==33:w=u
+            elif op==40:
+             s=imm+u;assert slots[s][0]!=2
+             slots[s]=(2,v)
+             for dd,tt in defer[s]:q.append((dd,tt[:3]+(v,)))
+             defer[s]=[];w=v
+            elif op==48:
+             ix=imm+v;assert ix<32 and not mask>>ix&1
+             o[ix]=u&255;mask|=1<<ix
+             continue
+            else:raise Exception(('bad opcode',i,op))
+            fan(tag+(w,));steps+=1
+            if steps>2000000:raise Exception('too many steps')
+           assert not match and not any(s==1 for s,v in slots),('deadlock',len(match))
+           assert mask==(1<<mask.bit_length())-1
+           print('STEPS',steps,flush=True)
+           return bytes(o[:mask.bit_length()])
+          def recv(s):
+           b=bytearray()
+           while len(b)<200000:
+            x=s.recv(65536)
+            if not x:break
+            b+=x
+            if b.endswith(b'> '):break
+           return bytes(b)
+          with socket.create_connection(('0.cloud.chals.io',28332),timeout=15) as s:
+           s.settimeout(15)
+           print('BANNER',repr(recv(s)),flush=True)
+           s.sendall(b'IMAGE\n');res=recv(s)
+           print('IMAGE_HEAD',repr(res[:120]),'LEN',len(res),flush=True)
+           mo=re.search(rb'IMAGE\s+(\d+)\s+([A-Za-z0-9+/=]+)',res)
+           if not mo:raise Exception('no image')
+           img=base64.b64decode(mo[2]);print('IMG',len(img),img[8:12],flush=True)
+           assert len(img)==int(mo[1])
+           code=go(img);print('CODE',repr(code),flush=True)
+           for j in range(3):
+            s.sendall(b'RELEASE '+code+b'\n')
+            print('ANSWER',j,repr(recv(s)),flush=True)
           PY
