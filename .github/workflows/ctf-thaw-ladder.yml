@@ -1,0 +1,23 @@
+name: Thaw Ladder probe
+on:
+  push:
+    branches: [ctf/thaw-ladder-investigation]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe field controller
+        run: |
+          python3 - <<'PY'
+          import socket
+          h,p='0.cloud.chals.io',13929
+          print(socket.getaddrinfo(h,p),flush=True)
+          s=socket.create_connection((h,p),timeout=8)
+          s.settimeout(8)
+          print('BANNER',s.recv(4096),flush=True)
+          s.close()
+          PY
