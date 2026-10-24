@@ -1,0 +1,40 @@
+name: CTF thaw-ladder controller probe
+on:
+  push:
+    paths: ['.github/workflows/thaw-ladder-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read FROSTLANG controller responses
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket,sys
+          host,port='0.cloud.chals.io',13929
+          print('connecting',host,port,flush=True)
+          try:
+              with socket.create_connection((host,port),timeout=10) as s:
+                  s.settimeout(15)
+                  f=s.makefile('rwb',buffering=0)
+                  print('BANNER:',repr(f.readline()),flush=True)
+                  plans=[
+                     ('HALT','00000000'),
+                     ('NOP HALT','f000000000000000'),
+                     ('SEAL0 HALT','d000000000000000'),
+                     ('SEAL0 STB CTL','d00000006000820000000000'),
+                     ('LDB PROFILE','4100900000000000'),
+                     ('LDW BOOT','5100800200000000'),
+                     ('ATT unpriv','e100000000000000'),
+                  ]
+                  for name,hexcode in plans:
+                     f.write(b'PLAN '+hexcode.encode()+b'\n')
+                     print(name,repr(f.readline()),flush=True)
+          except Exception as e:
+              print(type(e).__name__,str(e),flush=True)
+              sys.exit(1)
+          PY
