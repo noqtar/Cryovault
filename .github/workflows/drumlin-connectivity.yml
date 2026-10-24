@@ -1,0 +1,12 @@
+name: DRUMLIN connectivity
+on:
+  push:
+    branches: [drumlin-probe-20261025]
+  pull_request:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Endpoint HEAD
+        run: curl -sSI --connect-timeout 5 --max-time 12 https://isfcrpesu-drumlin.chals.io/guide || true
