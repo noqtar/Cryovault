@@ -10,4 +10,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run floe diagnostic
-        run: python3 floe-diagnostic.py
+        run: python3 floe-solve.py
