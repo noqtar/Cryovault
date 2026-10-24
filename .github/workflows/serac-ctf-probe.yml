@@ -1,0 +1,38 @@
+name: Serac CTF connectivity diagnostic
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Test long frames
+        run: |
+          python3 - <<'PY'
+          import socket,struct,time
+          H='0.cloud.chals.io';P=16966
+          for n in (80,96,100,112,120,127,128,144,160,192,200,255,256,257,300,512,1024,2048,4096,8192,32767,65535):
+              try:
+                  s=socket.create_connection((H,P),timeout=3);s.settimeout(1.5)
+                  banner=s.recv(128)
+                  start=time.monotonic()
+                  s.sendall(struct.pack('>H',n)+b'A'*n)
+                  d=b'';state='timeout'
+                  while time.monotonic()-start<1.8:
+                      try:
+                          r=s.recv(4096)
+                          if not r:state='EOF';break
+                          d+=r
+                      except socket.timeout:break
+                  try:
+                      s.sendall(b'\x00\x01Z')
+                      s.settimeout(.7)
+                      follow=s.recv(100)
+                  except Exception as e:follow=repr(e).encode()
+                  print(n,'banner',repr(banner),'reply',repr(d[:200]),'state',state,'follow',repr(follow),flush=True)
+                  s.close()
+              except Exception as e: print(n,'error',repr(e),flush=True)
+          PY
