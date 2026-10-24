@@ -1,0 +1,39 @@
+name: Thaw Ladder protocol check
+on:
+  push:
+    branches: [ctf/thaw-ladder-investigation]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check field PLAN parsing
+        run: |
+          python3 - <<'PY'
+          import socket
+          s=socket.create_connection(('0.cloud.chals.io',13929),timeout=10)
+          s.settimeout(10)
+          f=s.makefile('rb')
+          print('banner',f.readline().decode().strip())
+          cases=[
+            ('HALT','00000000'),
+            ('HALT reserved','00000001'),
+            ('NOP','f000000000000000'),
+            ('NOP reserved','f000000100000000'),
+            ('LDI reserved','1110000100000000'),
+            ('SEAL reserved','d000000100000000'),
+            ('ATT reserved','e000000100000000'),
+            ('max plan','f0000000'*1023+'00000000'),
+            ('over max','f0000000'*1024+'00000000'),
+          ]
+          for label,words in cases:
+            s.sendall(('PLAN '+words+'\n').encode())
+            ans=f.readline().decode(errors='replace').strip()
+            print(label,ans,flush=True)
+          s.close()
+          PY
