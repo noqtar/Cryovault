@@ -1,0 +1,60 @@
+name: Blizzard CTF probe
+on:
+  push:
+    branches: [ctf-blizzard-diagnostics-20261024]
+    paths: ['.github/workflows/ctf-blizzard-probe.yml']
+permissions:
+  contents: write
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Probe TCP service
+        shell: bash
+        run: |
+          python3 - <<'PY' > ctf_blizzard_probe.log 2>&1
+          import socket,time,struct,re
+          host,port='0.cloud.chals.io',29569
+          try:
+              print("IP: ",socket.getaddrinfo(host,port),flush=True)
+          except Exception as e:print("DNS error",repr(e),flush=True)
+          cases=[
+          ('silent',b''),('newline',b'\n'),('help',b'help\n'),
+          ('zero-string',b'0\n'),('one-string',b'1\n'),
+          ('len4be',struct.pack('>I',5)+b'hello'),('len4le',struct.pack('<I',5)+b'hello'),
+          ('len2be',struct.pack('>H',5)+b'hello'),('len2le',struct.pack('<H',5)+b'hello'),
+          ('len1',bytes([5])+b'hello'),('len4b-zero',b'\x00'*4),
+          ('len4l-zero',b'\x00'*4),('json',b'{"reading":5}\n'),
+          ('sample',b'5:hello\n'),('length-line',b'5\nhello\n'),
+          ('header',b'POST / HTTP/1.0\r\n\r\n')]
+          for title,payload in cases:
+              try:
+                  s=socket.create_connection((host,port),timeout=3)
+                  s.settimeout(.9)
+                  before=b''
+                  try:before=s.recv(10240)
+                  except socket.timeout:pass
+                  print('\nCASE',title,'BANNER',repr(before[:5000]),flush=True)
+                  if payload:s.sendall(payload)
+                  after=b''
+                  while len(after)<16000:
+                      try:
+                          x=s.recv(8192)
+                          if not x: break
+                          after+=x
+                      except socket.timeout:break
+                  print('PAYLOAD',repr(payload),'OUTPUT',repr(after[:16000]),flush=True)
+                  s.close()
+              except Exception as e:print('CASE',title,'ERROR',repr(e),flush=True)
+          PY
+      - name: Save result on temporary branch
+        run: |
+          git config user.name "ctf-probe"
+          git config user.email "ctf-probe@users.noreply.github.com"
+          git add ctf_blizzard_probe.log
+          git commit -m "CTF blizzard: TCP diagnostics" || true
+          git push origin HEAD:ctf-blizzard-diagnostics-20261024
