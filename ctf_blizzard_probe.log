@@ -1,0 +1,49 @@
+IP:  [(<AddressFamily.AF_INET: 2>, <SocketKind.SOCK_STREAM: 1>, 6, '', ('165.227.210.30', 29569)), (<AddressFamily.AF_INET: 2>, <SocketKind.SOCK_DGRAM: 2>, 17, '', ('165.227.210.30', 29569)), (<AddressFamily.AF_INET: 2>, <SocketKind.SOCK_RAW: 3>, 0, '', ('165.227.210.30', 29569))]
+
+CASE silent BANNER b'blizzard relay up.\n'
+PAYLOAD b'' OUTPUT b'relay> '
+
+CASE newline BANNER b'blizzard relay up.\n'
+PAYLOAD b'\n' OUTPUT b'relay> '
+
+CASE help BANNER b'blizzard relay up.\n'
+PAYLOAD b'help\n' OUTPUT b'relay> '
+
+CASE zero-string BANNER b'blizzard relay up.\n'
+PAYLOAD b'0\n' OUTPUT b'relay> '
+
+CASE one-string BANNER b'blizzard relay up.\n'
+PAYLOAD b'1\n' OUTPUT b'relay> '
+
+CASE len4be BANNER b'blizzard relay up.\n'
+PAYLOAD b'\x00\x00\x00\x05hello' OUTPUT b'relay> '
+
+CASE len4le BANNER b'blizzard relay up.\n'
+PAYLOAD b'\x05\x00\x00\x00hello' OUTPUT b'relay> '
+
+CASE len2be BANNER b'blizzard relay up.\n'
+PAYLOAD b'\x00\x05hello' OUTPUT b'relay> relayed 5.\nrelay> '
+
+CASE len2le BANNER b'blizzard relay up.\nrelay> '
+PAYLOAD b'\x05\x00hello' OUTPUT b''
+
+CASE len1 BANNER b'blizzard relay up.\nrelay> '
+PAYLOAD b'\x05hello' OUTPUT b''
+
+CASE len4b-zero BANNER b'blizzard relay up.\n'
+PAYLOAD b'\x00\x00\x00\x00' OUTPUT b'relay> '
+
+CASE len4l-zero BANNER b'blizzard relay up.\n'
+PAYLOAD b'\x00\x00\x00\x00' OUTPUT b'relay> '
+
+CASE json BANNER b'blizzard relay up.\n'
+PAYLOAD b'{"reading":5}\n' OUTPUT b'relay> '
+
+CASE sample BANNER b'blizzard relay up.\n'
+PAYLOAD b'5:hello\n' OUTPUT b'relay> '
+
+CASE length-line BANNER b'blizzard relay up.\n'
+PAYLOAD b'5\nhello\n' OUTPUT b'relay> '
+
+CASE header BANNER b'blizzard relay up.\nrelay> '
+PAYLOAD b'POST / HTTP/1.0\r\n\r\n' OUTPUT b''
