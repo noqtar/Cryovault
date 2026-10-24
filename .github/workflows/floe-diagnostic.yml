@@ -1,0 +1,13 @@
+name: floe isolated diagnostic
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run floe diagnostic
+        run: python3 floe-diagnostic.py
