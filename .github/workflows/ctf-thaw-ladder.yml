@@ -2,6 +2,8 @@ name: Thaw Ladder probe
 on:
   push:
     branches: [ctf/thaw-ladder-investigation]
+  pull_request:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 permissions:
   contents: read
