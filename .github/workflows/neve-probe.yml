@@ -1,0 +1,37 @@
+name: Neve CTF relay probe
+on:
+  push:
+    branches: [ctf-neve-probe-20261024]
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: inspect relay
+        run: |
+          python3 - <<'PY'
+          import socket,struct,select,time
+          H='0.cloud.chals.io'; P=18435
+          def read(s,t=1):
+              b=b'';stop=time.monotonic()+t
+              while time.monotonic()<stop:
+                  a,_,_=select.select([s],[],[],max(0,stop-time.monotonic()))
+                  if not a: break
+                  q=s.recv(16384)
+                  if not q: break
+                  b+=q
+                  if len(b)>32768: break
+              return b
+          print('DNS',socket.getaddrinfo(H,P),flush=True)
+          payloads=[('idle',[]),('line',[b'\n',b'help\n']),('http',[b'GET / HTTP/1.1\r\nHost: 0.cloud.chals.io\r\n\r\n']),('bigendian32',[struct.pack('>I',5)+b'hello']),('littleendian32',[struct.pack('<I',5)+b'hello']),('bigendian16',[struct.pack('>H',5)+b'hello']),('littleendian16',[struct.pack('<H',5)+b'hello']),('netstring',[b'5:hello,']),('json',[b'{"message":"hello"}\n']),('zero',[b'\0']),('length_1',[b'\x01']) ]
+          for label,packets in payloads:
+              print('\nTEST',label,flush=True)
+              try:
+                  s=socket.create_connection((H,P),timeout=4);s.settimeout(3)
+                  print('initial',repr(read(s,1)),flush=True)
+                  for p in packets:
+                      print('send',repr(p),flush=True);s.sendall(p);print('got',repr(read(s,1)),flush=True)
+                  s.close()
+              except Exception as e:print('ERR',repr(e),flush=True)
+          PY
