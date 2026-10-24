@@ -1,0 +1,57 @@
+name: Serac CTF connectivity diagnostic
+on:
+  pull_request:
+    branches: [main]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      contents: read
+    steps:
+      - name: Check TCP service and framing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket, time, struct, re
+          H='0.cloud.chals.io'; P=16966
+          print('Checking',H,P,flush=True)
+          try:
+              print('DNS',socket.getaddrinfo(H,P,type=socket.SOCK_STREAM),flush=True)
+          except Exception as e:
+              print('DNS_FAILURE',repr(e),flush=True); raise SystemExit(0)
+          def read(s,seconds):
+              end=time.monotonic()+seconds
+              b=bytearray()
+              while time.monotonic()<end and len(b)<8192:
+                  s.settimeout(min(.2,max(.02,end-time.monotonic())))
+                  try:
+                      c=s.recv(4096)
+                      if not c: break
+                      b.extend(c)
+                  except socket.timeout: continue
+                  except Exception as e: print('READ_ERROR',repr(e),flush=True);break
+              return bytes(b)
+          tests=[
+              ('banner',b''),('newline',b'\n'),('help',b'help\n'),
+              ('question',b'?\n'),('ping',b'PING\n'),
+              ('json',b'{"cmd":"help"}\n'),
+              ('singlezero',b'\x00'),
+              ('u8-frame',b'\x04help'),
+              ('u16be-frame',struct.pack('>H',4)+b'help'),
+              ('u16le-frame',struct.pack('<H',4)+b'help'),
+              ('u32be-frame',struct.pack('>I',4)+b'help'),
+              ('u32le-frame',struct.pack('<I',4)+b'help'),
+              ('u32be-zero',b'\x00'*4)]
+          for label,payload in tests:
+              try:
+                  with socket.create_connection((H,P),timeout=4) as s:
+                      before=read(s,.55)
+                      if payload: s.sendall(payload)
+                      after=read(s,1.1)
+                      print(label,'SENT',repr(payload),'INITIAL',repr(before[:500]),'AFTER',repr(after[:1000]),flush=True)
+                      fl=re.search(rb'isfcr\{[^}]+\}', before+after)
+                      if fl: print('FLAG',fl.group().decode(),flush=True); break
+              except Exception as e:
+                  print(label,'ERROR',repr(e),flush=True)
+          PY
