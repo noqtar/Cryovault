@@ -9,7 +9,18 @@ def probe(payload,limit=.55,finish=False):
             s.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,1)
             s.settimeout(.13)
             s.sendall(struct.pack(">H",len(payload))+payload)
-            if finish:s.shutdown(socket.SHUT_WR)
+            if finish:
+                pre=b''
+                q=time.monotonic()+.8
+                while time.monotonic()<q:
+                    try:
+                        ck=s.recv(4096)
+                        if not ck:break
+                        pre+=ck
+                        if b'logged ' in pre:break
+                    except socket.timeout:continue
+                raw+=pre
+                s.shutdown(socket.SHUT_WR)
             deadline=time.monotonic()+limit
             while time.monotonic()<deadline:
                 try:
