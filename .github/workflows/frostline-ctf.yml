@@ -1,0 +1,41 @@
+name: Frostline CTF interface probe
+on:
+  push:
+    branches: [ctf/frostline-warmstart-20261024]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Inspect sequencer maintenance port
+        run: |
+          python3 - <<'PY'
+          import socket,time
+          host='0.cloud.chals.io'; port=28332
+          print('DNS',socket.getaddrinfo(host,port),flush=True)
+          def recv(s, maxsec=1.2):
+              s.settimeout(.25); out=bytearray(); end=time.monotonic()+maxsec
+              while time.monotonic()<end:
+                  try:
+                      chunk=s.recv(65536)
+                      if not chunk: print('EOF',flush=True); break
+                      out.extend(chunk)
+                      if len(out)>120000:break
+                      end=time.monotonic()+.45
+                  except socket.timeout: continue
+              if out:
+                  print('RX_BYTES',len(out),'HEAD',repr(bytes(out[:12000])),'TAIL',repr(bytes(out[-500:])),flush=True)
+              return bytes(out)
+          for command in [None,b'help\n',b'status\n',b'?\n']:
+              try:
+                  with socket.create_connection((host,port),timeout=7) as s:
+                      print('CONNECTED',flush=True)
+                      recv(s,2)
+                      if command:
+                          print('SEND',repr(command),flush=True)
+                          s.sendall(command)
+                          recv(s,2)
+              except Exception as e:print('ERROR',type(e).__name__,str(e),flush=True)
+          PY
