@@ -1,8 +1,7 @@
 name: Blizzard CTF probe
 on:
-  push:
-    branches: [ctf-blizzard-diagnostics-20261024]
-    paths: ['.github/workflows/ctf-blizzard-probe.yml']
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
 jobs:
