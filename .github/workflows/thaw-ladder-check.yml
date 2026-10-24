@@ -1,5 +1,6 @@
 name: CTF thaw-ladder controller probe
 on:
+  pull_request:
   push:
     paths: ['.github/workflows/thaw-ladder-check.yml']
   workflow_dispatch:
