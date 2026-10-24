@@ -8,5 +8,41 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Endpoint HEAD
-        run: curl -sSI --connect-timeout 5 --max-time 12 https://isfcrpesu-drumlin.chals.io/guide || true
+      - name: DRUMLIN protocol probe
+        shell: bash
+        run: |
+          cat >/tmp/probe.py <<'PY'
+          import urllib.request,urllib.error,json,base64,traceback,zlib
+          origin="https://isfcrpesu-drumlin.chals.io"
+          def req(method,path,data=None):
+              global origin
+              r=urllib.request.Request(origin+path,method=method,data=data,headers={"Accept":"application/json"})
+              try:
+                  with urllib.request.urlopen(r,timeout=15) as resp:status=resp.status;body=resp.read()
+              except urllib.error.HTTPError as e: status=e.code;body=e.read()
+              try:body=json.loads(body)
+              except:body=body.decode("utf-8","backslashreplace")
+              return status,body
+          def out(k,val): print(k,json.dumps(val,ensure_ascii=True)[:9000],flush=True)
+          try:
+              status,s=req("POST","/session",b"")
+              out("session_status",status)
+              if status!=201:out("session_error",s);quit()
+              origin=s["base"]
+              for path in ["/whoami","/objects","/objects/bay-07.policy","/objects/bay-07.policy/data","/usage"]:
+                  out(path,req("GET",path))
+              out("initial_release",req("POST","/release",b""))
+              for name,blob in [("a",b"Q"*96),("b",b"R"*96),("c",b"S"*96),("share1",b"Z"*64),("share2",b"Z"*64)]:
+                  out("PUT "+name,req("PUT","/objects/"+name,blob))
+                  out("STAT "+name,req("GET","/objects/"+name))
+                  out("CRC "+name,zlib.crc32(blob))
+              out("PATCH share1",req("PATCH","/objects/share1?at=0",b"X"))
+              out("GET share2",req("GET","/objects/share2/data"))
+              out("reissue",req("POST","/reissue",b""))
+              out("policy after",req("GET","/objects/bay-07.policy"))
+              out("release after",req("POST","/release",b""))
+          except Exception as e:
+              out("ERROR",repr(e));print(traceback.format_exc())
+          
+          PY
+          python3 /tmp/probe.py
