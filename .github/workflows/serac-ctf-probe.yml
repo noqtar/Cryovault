@@ -9,34 +9,30 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Probe framing lengths and repeated reads
-        shell: bash
+      - name: Test long frames
         run: |
           python3 - <<'PY'
-          import socket,struct,time,re
+          import socket,struct,time
           H='0.cloud.chals.io';P=16966
-          def probe(name,payload,timeout=.7):
+          for n in (80,96,100,112,120,127,128,144,160,192,200,255,256,257,300,512,1024,2048,4096,8192,32767,65535):
               try:
-                  with socket.create_connection((H,P),timeout=3) as s:
-                      s.settimeout(.2); initial=s.recv(1024)
-                      s.sendall(payload)
-                      buf=b'';end=time.monotonic()+timeout
-                      while time.monotonic()<end:
-                          try:
-                              d=s.recv(8192)
-                              if not d:break
-                              buf+=d
-                          except socket.timeout:pass
-                      print(name,'len',len(payload),'out',repr(buf[:1200]),'TAIL',repr(buf[-200:]),flush=True)
-                      m=re.search(rb'isfcr\{[^}]+\}',buf)
-                      if m:print('FLAG',m.group().decode(),flush=True)
-              except Exception as e:print(name,'ERR',repr(e),flush=True)
-          def frame(b):return struct.pack('>H',len(b))+b
-          for n in [0,1,2,4,16,32,64,100,128,200,255,256,257,300,400,512,768,1024,2048,4096,8192,16000,32000,60000]:
-              probe('size-'+str(n),frame(b'A'*n),.35)
-          probe('multiple',frame(b'hi')*20,1.5)
-          probe('double',frame(b'hi')+frame(b'whoami')+frame(b'cat /flag'),1)
-          probe('nul',frame(b'AAAA\x00BBBB'),.5)
-          probe('format',frame(b'%p.'*100),.5)
-          probe('len-short',struct.pack('>H',100)+b'A'*20,.5)
+                  s=socket.create_connection((H,P),timeout=3);s.settimeout(1.5)
+                  banner=s.recv(128)
+                  start=time.monotonic()
+                  s.sendall(struct.pack('>H',n)+b'A'*n)
+                  d=b'';state='timeout'
+                  while time.monotonic()-start<1.8:
+                      try:
+                          r=s.recv(4096)
+                          if not r:state='EOF';break
+                          d+=r
+                      except socket.timeout:break
+                  try:
+                      s.sendall(b'\x00\x01Z')
+                      s.settimeout(.7)
+                      follow=s.recv(100)
+                  except Exception as e:follow=repr(e).encode()
+                  print(n,'banner',repr(banner),'reply',repr(d[:200]),'state',state,'follow',repr(follow),flush=True)
+                  s.close()
+              except Exception as e: print(n,'error',repr(e),flush=True)
           PY
