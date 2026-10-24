@@ -1,4 +1,4 @@
-name: Neve boundary exploration
+name: Neve threshold probe
 on:
   push:
     branches: [ctf-neve-probe-20261024]
@@ -6,37 +6,26 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 3
     steps:
       - run: |
           python3 - <<'PY'
           import socket,struct,select,time
           H='0.cloud.chals.io';P=18435
-          def rd(s,t=.35):
-              b=b'';end=time.monotonic()+t
-              while time.monotonic()<end:
-                  if not select.select([s],[],[],max(0,end-time.monotonic()))[0]:break
-                  x=s.recv(65536)
-                  if not x:break
-                  b+=x
-              return b
-          def test(label,frames):
-              try:
-                  s=socket.create_connection((H,P),timeout=3);s.settimeout(1)
-                  rd(s,.1);start=time.monotonic()
-                  for length,buf in frames:
-                      s.sendall(struct.pack('>H',length)+buf)
-                  o=rd(s,.75)
-                  print(label,'response',repr(o[:1024]),'len',len(o),'dt',round(time.monotonic()-start,2),flush=True)
-                  s.close()
-              except Exception as e:print(label,'ERR',repr(e),flush=True)
-          for n in [0,1,2,3,4,7,8,15,16,31,32,63,64,127,128,255,256,257,511,512,513,1023,1024,2048,4096,8192,16384,32767,32768,65535]:
-              test('size'+str(n),[(n,b'A'*n)])
-          for val in [b'flag',b'FLAG',b'/flag',b'cat /flag',b'help',b'admin',b'quit',b'printflag',b'\x00'*10,b'\xff'*10]:
-              test('cmd'+repr(val),[(len(val),val)])
-          for n in [2,3,10,100]:
-              test('repeat'+str(n),[(5,b'hello')]*n)
-          test('overlong-one',[(1,b'A'*1024)])
-          test('zero-and-more',[(0,b''),(5,b'hello')])
+          def run(n,payload=None):
+           try:
+            x=socket.create_connection((H,P),timeout=2);x.settimeout(.6);x.recv(4096);x.sendall(struct.pack('>H',n)+(payload or b'A'*n))
+            b=b''
+            try:
+             while True:
+              q=x.recv(4096)
+              if not q:break
+              b+=q
+            except socket.timeout:pass
+            x.close()
+            print(n,repr(b[:100]),flush=True)
+           except Exception as e:print(n,'ERR',repr(e),flush=True)
+          for n in [65,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,112,120,126]:
+           run(n)
           
           PY
