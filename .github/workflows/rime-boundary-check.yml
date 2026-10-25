@@ -1,0 +1,21 @@
+name: Rime boundary check
+on:
+  push:
+    branches: [ctf-rime-probe-20261025]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check byte count
+        run: |
+          python3 - <<'PY'
+          import socket
+          for n in [101,102,103,104,105,106,107,108,109,110,111]:
+              try:
+                  with socket.create_connection(('0.cloud.chals.io',24359),timeout=5) as s:
+                      s.settimeout(2)
+                      s.recv(1024)
+                      s.sendall(b'A'*n+b'\n')
+                      print(n,repr(s.recv(1024)),flush=True)
+              except Exception as e: print(n,repr(e),flush=True)
+          PY
