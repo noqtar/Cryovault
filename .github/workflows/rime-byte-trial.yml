@@ -1,0 +1,27 @@
+name: Rime bytes trial
+on:
+  push:
+    branches: [rime-urgent-20261025]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Test byte patterns at boundary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket
+          H='0.cloud.chals.io';P=24359
+          cases=[b'A'*103+b'\n',b'A'*104+b'\n',b'A'*103+b'\x00'+b'\n',b'A'*103+b'B'+b'\n',b'A'*102+b'\x00A'+b'\n',b'A'*104+b'\x00'+b'\n',b'A'*104+b'B'+b'\n',b'A'*104+b'\x0a',b'A'*103+b'\r\n']
+          for i,v in enumerate(cases):
+            try:
+              with socket.create_connection((H,P),timeout=2) as s:
+                s.settimeout(.8)
+                s.recv(4096)
+                s.sendall(v)
+                try:o=s.recv(4096)
+                except Exception as e:o=repr(e).encode()
+                print(i,len(v),repr(o[:250]),flush=True)
+            except Exception as e:print(i,repr(e),flush=True)
+          PY
