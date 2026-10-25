@@ -1,0 +1,21 @@
+name: RIME Witness connectivity
+on:
+  push:
+    branches: [ctf-rime-witness-20261025]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Test challenge service
+        run: |
+          python3 - <<'PY'
+          import socket
+          try:
+              with socket.create_connection(('0.cloud.chals.io',29620),timeout=8) as s:
+                  s.settimeout(5)
+                  print('CONNECTED',repr(s.recv(2048)),flush=True)
+          except Exception as e:print('ERROR',repr(e),flush=True)
+          PY
