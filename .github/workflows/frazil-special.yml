@@ -1,0 +1,44 @@
+name: FRAZIL special opcode
+on:
+  push:
+    paths: ['.github/workflows/frazil-special.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Test special opcodes and handshake
+        run: |
+          python3 - <<'PY'
+          import socket,time
+          H,P='0.cloud.chals.io',18691
+          trials=[
+            ('Z',b'Z'),('q',b'q'),('tilde',b'~'),('three',b'3'),('two',b'2'),('four',b'4'),
+            ('Z10',b'Z'*10),('q10',b'q'*10),('tilde10',b'~'*10),
+            ('q_4_zeros',b'q'+b'\0'*4),('q_8_zeros',b'q'+b'\0'*8),
+            ('q_bank',b'q'+bytes.fromhex('c483c6b4')+b'\0'*48),
+            ('q_64',b'q'+bytes(range(64))),
+            ('Z_q',b'Zq'),('Z_2',b'Z2'),('Z_tilde',b'Z~'),('tilde_Z',b'~Z'),
+            ('q_Z',b'qZ'),('q_tilde',b'q~'),('3_Z',b'3Z'),
+            ('ascii_help',b'help\n'),('ascii_flag',b'flag\n'),
+          ]
+          for name,payload in trials:
+            try:
+              with socket.create_connection((H,P),timeout=2) as s:
+                s.settimeout(.3)
+                try: pre=s.recv(32)
+                except socket.timeout:pre=b''
+                if pre:print(name,'BANNER',pre.hex(),flush=True)
+                s.sendall(payload)
+                out=bytearray();t=time.monotonic()+1
+                while time.monotonic()<t:
+                  s.settimeout(min(.3,t-time.monotonic()))
+                  try:x=s.recv(4096)
+                  except socket.timeout:continue
+                  if not x:break
+                  out+=x
+                print(name,'=>',out[:512].hex(),'size',len(out),flush=True)
+            except Exception as e:print(name,'ERROR',str(e),flush=True)
+          PY
