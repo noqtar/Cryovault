@@ -1,0 +1,40 @@
+name: Rime checkpoint
+on:
+  push:
+    branches: [rime-urgent-20261025]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check line boundaries
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket,time
+          def read_until(sock,t=1.5):
+            sock.settimeout(.25)
+            b=b''; end=time.monotonic()+t
+            while time.monotonic()<end:
+              try:
+                z=sock.recv(4096)
+                if not z: return 'EOF',b
+                b+=z
+                if b'reading> ' in b or b'isfcr{' in b:return 'PROMPT',b
+              except socket.timeout:pass
+              except OSError:return 'ERR',b
+            return 'TIMEOUT',b
+          def one(k):
+            try:
+              with socket.create_connection(('0.cloud.chals.io',24359),timeout=3) as s:
+                a=read_until(s)
+                if a[0]!='PROMPT':return ('NO_BANNER',a)
+                s.sendall(b'A'*k+b'\n')
+                b=read_until(s,1.8)
+                return b[0],b[1][:128]
+            except Exception as e:return type(e).__name__,str(e)
+          for k in [96,97,98,99,100,101,102,103,104,105,106,108,111,112,127,128]:
+            print('SIZE',k,'RESULT',repr(one(k)),flush=True)
+          for k in [99,100,101,102]:
+            print('RETRY',k,'RESULT',repr(one(k)),flush=True)
+          PY
