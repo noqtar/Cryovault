@@ -1,0 +1,31 @@
+name: Rime reading investigation
+on:
+  push:
+    branches: [ctf-rime-probe-20261025]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check repeated readings
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket
+          h='0.cloud.chals.io'; p=24359
+          def recv(s):
+              s.settimeout(0.5)
+              try:return s.recv(4096).decode(errors='replace')
+              except Exception:return ''
+          for seq in [['a','aa','aaa','abcd','0','10','100'],['1']*100,['x'*n for n in (8,16,32,64,128,256)]]:
+              print('CASE',len(seq),flush=True)
+              try:
+                  with socket.create_connection((h,p),timeout=5) as s:
+                      print(repr(recv(s)),flush=True)
+                      for i,x in enumerate(seq):
+                          s.sendall((x+'\n').encode())
+                          output=recv(s)
+                          if i<12 or i%10==0 or 'isfcr{' in output:print(i,repr(x[:30]),repr(output),flush=True)
+                          if not output: break
+              except Exception as e: print('ERROR',repr(e),flush=True)
+          PY
