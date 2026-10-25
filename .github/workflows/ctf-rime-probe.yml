@@ -1,0 +1,38 @@
+name: Rime TCP challenge probe
+on:
+  push:
+    branches: [ctf-rime-probe-20261025]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe service
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket, time
+          host='0.cloud.chals.io'; port=24359
+          def read(s, wait=0.8, limit=12000):
+              s.settimeout(0.25)
+              end=time.monotonic()+wait
+              out=b''
+              while time.monotonic()<end and len(out)<limit:
+                  try:
+                      p=s.recv(4096)
+                      if not p:break
+                      out+=p
+                      end=time.monotonic()+0.35
+                  except socket.timeout:pass
+                  except OSError:break
+              return out.decode('utf-8','backslashreplace')
+          for command in [None,'','help','?','status','read','0','1']:
+              print('===',repr(command),'===',flush=True)
+              try:
+                  with socket.create_connection((host,port),timeout=4) as s:
+                      print('BANNER',repr(read(s)),flush=True)
+                      if command is not None:
+                          s.sendall((command+'\n').encode())
+                          print('RESPONSE',repr(read(s)),flush=True)
+              except Exception as e:print('ERROR',repr(e),flush=True)
+          PY
