@@ -1,0 +1,40 @@
+name: FRAZIL opcode scan
+on:
+  push:
+    paths: ['.github/workflows/frazil-opcode-20261025.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Scan opcode responses
+        run: |
+          python3 - <<'PY'
+          import socket, collections, time
+          H,P='0.cloud.chals.io',18691
+          for step in range(3):
+            try:
+              with socket.create_connection((H,P),timeout=5) as s:
+                s.settimeout(3)
+                data=bytes(range(256))
+                s.sendall(data)
+                buf=bytearray()
+                while len(buf)<len(data)*6:
+                  try: v=s.recv(8192)
+                  except socket.timeout:break
+                  if not v:break
+                  buf+=v
+                print('count',len(buf),'bytes',flush=True)
+                if len(buf)==len(data)*6:
+                  items=[bytes(buf[i:i+6]) for i in range(0,len(buf),6)]
+                  counts=collections.Counter(x[1:].hex() for x in items)
+                  print('status groups',counts,flush=True)
+                  for i,x in enumerate(items):
+                    if x[1:]!=bytes.fromhex('c100000000'):print('INTERESTING',i,'hex',x.hex(),flush=True)
+                  break
+                else:print('partial',buf[:64].hex(),flush=True)
+            except Exception as e:print('ERROR',repr(e),flush=True)
+            time.sleep(1)
+          PY
