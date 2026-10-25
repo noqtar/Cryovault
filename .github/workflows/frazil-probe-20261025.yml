@@ -1,0 +1,63 @@
+name: FRAZIL isolated TCP probe
+on:
+  push:
+    paths: ['.github/workflows/frazil-probe-20261025.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Diagnose vault protocol
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket, time, base64, struct
+          H,P='0.cloud.chals.io',18691
+          bank=base64.b64decode("xIPGtAwoBz4sGhI7PSAfKyoPJgohCQIdFBkLLRYTBRsXETE/GDc5BiQlHw8BAAAAYOfBBRa5tc3IxI99TLkWghbJ28wYNutEXEuIVR2UAg8X2YNTAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+          print('bank length:',len(bank), 'header:',bank[:16].hex(),flush=True)
+          try:print('DNS',socket.getaddrinfo(H,P)[:2],flush=True)
+          except Exception as e:print('DNS ERROR',repr(e),flush=True)
+          def trial(name,data,halfclose=False):
+              try:
+                  with socket.create_connection((H,P),timeout=6) as s:
+                      s.settimeout(0.4)
+                      try: banner=s.recv(1000)
+                      except socket.timeout: banner=b''
+                      if banner.startswith(bytes.fromhex('ffff00000000')):
+                          print(name,'BUSY',banner.hex(),flush=True);return
+                      s.sendall(data)
+                      if halfclose:s.shutdown(socket.SHUT_WR)
+                      result=bytearray();deadline=time.monotonic()+1.8
+                      while time.monotonic()<deadline and len(result)<8192:
+                          s.settimeout(min(.4,deadline-time.monotonic()))
+                          try: r=s.recv(8192-len(result))
+                          except socket.timeout:continue
+                          if not r:break
+                          result+=r
+                      print(name,'sent',len(data),'banner',banner.hex(),'recv',len(result),result[:256].hex(),'ascii',repr(bytes(result[:100])),flush=True)
+              except Exception as e:print(name,'ERROR',repr(e),flush=True)
+          payloads=[
+              ('empty',b'',True),
+              ('one_zero',b'\x00'),
+              ('6_zero',b'\x00'*6),
+              ('6_one',b'\x01'+b'\x00'*5),
+              ('cmd0_16',b'\x00'*16),
+              ('cmd1_16',b'\x01'+b'\x00'*15),
+              ('magic4',bank[:4]),
+              ('bank32',bank[:32]),
+              ('bank48',bank[:48]),
+              ('bank84',bank[:84]),
+              ('bank128',bank),
+              ('bank128_end',bank,True),
+              ('zero128',b'\x00'*128),
+              ('bank_plus0',bank+b'\x00'),
+              ('bank_prefixedlen',struct.pack('<I',len(bank))+bank),
+              ('magic_len',bank[:4]+struct.pack('<I',128)+bank),
+          ]
+          for t in payloads:
+              trial(*t)
+              time.sleep(.15)
+          PY
