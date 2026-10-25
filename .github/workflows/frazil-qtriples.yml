@@ -1,0 +1,28 @@
+name: FRAZIL q triple scan
+on:
+  push:
+    paths: ['.github/workflows/frazil-qtriples.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe q triple opcode
+        run: |
+          python3 - <<'PY'
+          import socket,time
+          H,P='0.cloud.chals.io',18691
+          for axis in range(2):
+            for i in range(32):
+              p=b'q'+(bytes([i,0]) if axis==0 else bytes([0,i]))
+              try:
+                with socket.create_connection((H,P),timeout=3) as s:
+                  s.settimeout(.17);s.sendall(p)
+                  try:r=s.recv(100)
+                  except socket.timeout:r=b''
+                  if i<4 or r != bytes.fromhex('71c300000000'):
+                    print('axis',axis,'i',i,'response',r.hex(),flush=True)
+              except Exception as e:print('error',axis,i,str(e),flush=True)
+          PY
