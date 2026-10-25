@@ -1,0 +1,29 @@
+name: FRAZIL q operand variants
+on:
+  push:
+    paths: ['.github/workflows/frazil-qvariants.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Scan q subcommands
+        run: |
+          python3 - <<'PY'
+          import socket,time
+          H,P='0.cloud.chals.io',18691
+          seqs=[('q0',b'q\0'),('q1',b'q\x01'),('q2',b'q\x02'),('q3',b'q\x03'),('q4',b'q\x04'),('q5',b'q\x05'),('q10',b'q\x0a'),('q17',b'q\x11'),('q18',b'q\x12'),('q19',b'q\x13'),('q23',b'q\x17'),('q24',b'q\x18'),('q36',b'q\x24'),('q255',b'q\xff'),('q0Z',b'q\0Z'),('Zq0',b'Zq\0'),('3_zeros',b'3\0\0\0'),('q0_3',b'q\0' + b'3\0\0\0'),('3q0',b'3\0\0\0q\0')]
+          for name,p in seqs:
+            try:
+              with socket.create_connection((H,P),timeout=3) as s:
+                s.settimeout(.3);s.sendall(p);r=bytearray();t=time.monotonic()+.35
+                while time.monotonic()<t:
+                  try: d=s.recv(1024)
+                  except socket.timeout:break
+                  if not d:break
+                  r+=d
+                print(name,len(r),r.hex(),flush=True)
+            except Exception as e:print(name,str(e),flush=True)
+          PY
